@@ -1,4 +1,6 @@
-# RoboPulse
+# RoboPulse - Adaptive Risk Monitoring
+
+**Control system for dynamic capital allocation.**
 
 Adaptive **α / β / γ** tuning for [Shimi](https://github.com/carjam/shimi)-style loan allocation: metrics, alerts, Streamlit dashboard.
 
