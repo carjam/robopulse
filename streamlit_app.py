@@ -120,22 +120,24 @@ with slide:
 
 st.session_state["rp_tape_end"] = int(st.session_state["rp_slider_loan"])
 
-# Full-tape alerts omitted while the scrubber sits on the first loan (replay start).
-_at_replay_start = idx_max > idx_min and int(st.session_state["rp_tape_end"]) == idx_min
-if not _at_replay_start:
-    _alerts: list[str] = []
-    if "infeasibility_rate_window" in full.columns:
-        bi = full["infeasibility_rate_window"] > cfg.infeasibility_alert_rate_max
-        if bi.any():
-            _alerts.append(f"Infeas. rate: **{int(bi.sum())}** loans (full tape).")
-    if "worst_fico_pct_dev" in full.columns:
-        bf = full["worst_fico_pct_dev"] > cfg.fico_epsilon_pct
-        if bf.any():
-            _alerts.append(f"FICO ε: **{int(bf.sum())}** loans (full tape).")
-    if _alerts:
-        st.warning("\n".join(_alerts))
-    else:
-        st.success("No alerts on full replay.")
+# Cumulative alerts through the visible tape end (matches scrubber / charts).
+_end_loan = int(st.session_state["rp_tape_end"])
+_visible = full[full["loan_index"] <= _end_loan]
+_alerts: list[str] = []
+if not _visible.empty and "infeasibility_rate_window" in _visible.columns:
+    bi = _visible["infeasibility_rate_window"] > cfg.infeasibility_alert_rate_max
+    if bi.any():
+        _alerts.append(
+            f"Infeas. rate: **{int(bi.sum())}** loans (through loan **{_end_loan}**)."
+        )
+if not _visible.empty and "worst_fico_pct_dev" in _visible.columns:
+    bf = _visible["worst_fico_pct_dev"] > cfg.fico_epsilon_pct
+    if bf.any():
+        _alerts.append(f"FICO ε: **{int(bf.sum())}** loans (through loan **{_end_loan}**).")
+if _alerts:
+    st.warning("\n".join(_alerts))
+else:
+    st.success(f"No alerts through loan **{_end_loan}**.")
 
 
 def _maybe_autoplay_advance() -> None:
