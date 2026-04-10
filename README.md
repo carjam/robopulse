@@ -49,13 +49,13 @@ $$
 
 **γ activation.** Until total funded face reaches `fico_gamma_min_total_funded_fraction` × **pool commitment**, RoboPulse forces $\gamma_{\mathrm{fico}} = 0$ regardless of $\delta_{\mathrm{worst}}$ (FICO term inactive in both controller and Shimi objective for that phase).
 
-**Exhaustion alignment (β channel).** Let $\mathrm{rem}_{i}$ be remaining commitment after the loan, $\bar{m}_{i}$ mean allocated face per loan over a trailing window, and `loans_per_calendar_day` = $\lambda$. Predicted **days-to-exhaustion** offsets (same units as code):
+**Exhaustion alignment (β channel).** Let $\mathrm{rem}_i$ be remaining commitment after the loan, $\bar{m}_i$ mean allocated face per loan over a trailing window, and $\lambda$ denote the config value `loans_per_calendar_day`. Predicted **days-to-exhaustion** offsets (same units as code):
 
 $$
-T_{i} = \frac{\mathrm{rem}_{i}}{\bar{m}_{i} \, \lambda}.
+T_i = \frac{\mathrm{rem}_i}{\bar{m}_i \, \lambda}.
 $$
 
-**Exhaustion spread** is $E = \max_{i} T_{i} - \min_{i} T_{i}$ (finite offsets only; degenerate cases return $0$).
+**Exhaustion spread** is $E = \max_i T_i - \min_i T_i$ (finite offsets only; degenerate cases return $0$).
 
 **Discrete-time controller.** Let $c$ be the **cap** threshold from `max_abs_share_deviation`, let $\varepsilon$ match `fico_epsilon_pct`, and let $g_{\alpha}, g_{\beta}, g_{\gamma}, g_{\mathrm{seed}}, \rho$ be the gains from `controller_gains` (with **decay** $\rho$ from `decay_when_within_tolerance`). On each **reevaluation** step (every `reevaluation_every_n_loans` loans), `adjust_params` applies **multiplicative** rules with **clipping** to `[param_bounds]`:
 
