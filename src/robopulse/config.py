@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +22,7 @@ class ControllerGains:
     beta_on_exhaustion_spread: float
     gamma_on_fico_violation: float
     decay_when_within_tolerance: float
+    gamma_seed_on_fico_violation: float = 0.12
 
 
 @dataclass

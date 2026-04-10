@@ -13,7 +13,7 @@ dependencies = [
     "numpy>=2.0,<3",
     "pandas>=2.0,<3",
     "plotly>=5.18,<6",
-    "streamlit>=1.28,<2",
+    "streamlit>=1.33,<2",
 ]
 
 [project.optional-dependencies]

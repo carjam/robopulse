@@ -46,7 +46,10 @@ def adjust_params(
             beta = _clip(beta * decay, b.beta_min, b.beta_max)
 
     if gamma_active and worst_fico_pct_dev is not None and worst_fico_pct_dev > eps:
-        gamma = _clip(gamma * g.gamma_on_fico_violation, b.gamma_min, b.gamma_max)
+        if gamma < 1e-12:
+            gamma = _clip(g.gamma_seed_on_fico_violation, b.gamma_min, b.gamma_max)
+        else:
+            gamma = _clip(gamma * g.gamma_on_fico_violation, b.gamma_min, b.gamma_max)
     elif gamma_active and worst_fico_pct_dev is not None and worst_fico_pct_dev < eps * 0.5:
         gamma = _clip(gamma * decay, b.gamma_min, b.gamma_max)
 

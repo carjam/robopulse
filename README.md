@@ -1,42 +1,7 @@
 # RoboPulse
 
-Control system for dynamic capital allocation.
+Adaptive **α / β / γ** tuning for [Shimi](https://github.com/carjam/shimi)-style loan allocation: metrics, alerts, Streamlit dashboard.
 
-**RoboPulse** is an allocation control layer for programs modeled with [Shimi](https://github.com/carjam/shimi): it tunes Shimi’s QP weights (α, β, γ) on a configurable schedule toward risk targets—share fit, exhaustion timing, portfolio FICO bands—and surfaces **monitoring-only** alerts (Gini, infeasibility).
+**Install:** `pip install -r requirements.txt && pip install -e .` (Shimi: `-e ../shimi` or `ROBOPULSE_SHIMI_ROOT`). **UI:** `streamlit run streamlit_app.py` — slider, **+1** (wrap), **Autoplay** (~1.2s, wrap). Demo tape: `data/demo_loans.csv`. **Config:** `config/default.json`.
 
-- **Product one-liner:** *The allocation heartbeat your risk desk can watch.*
-- **Python:** 3.11+
-- **Shimi:** install from a **local path** (default: sibling `../shimi`). Override with `ROBOPULSE_SHIMI_ROOT`.
-
-## Install
-
-```bash
-cd robopulse
-pip install -r requirements.txt
-pip install -e .
-```
-
-If Shimi lives elsewhere:
-
-```bash
-set ROBOPULSE_SHIMI_ROOT=C:\path\to\shimi
-pip install -e "%ROBOPULSE_SHIMI_ROOT%"
-pip install -e .
-```
-
-## Dashboard (no manual inputs)
-
-```bash
-cd robopulse
-streamlit run streamlit_app.py
-```
-
-Uses bundled default config and Shimi sample data paths resolved relative to this repo.
-
-## Configuration
-
-See `config/default.json`. Key fields: rolling windows, share deviation cap, FICO ε (per lender vs group mean), exhaustion alignment, reevaluation cadence (`1` = per loan when the controller runs), infeasibility alert threshold.
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+**License:** [MIT](LICENSE).
