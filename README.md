@@ -4,6 +4,77 @@
 
 Adaptive **α / β / γ** tuning for [Shimi](https://github.com/carjam/shimi)-style loan allocation: metrics, alerts, Streamlit dashboard.
 
+## Control method and mathematics
+
+### Shimi and RoboPulse
+
+- **[Shimi](https://github.com/carjam/shimi)** (dependency) implements the **inner** problem: each loan is a **convex quadratic program (QP)** over lender **shares** $s$, with fixed policy weights $(\alpha,\beta,\gamma)$. The full objective, feasible set, and standard-form QP statement are in Shimi’s README: [**Technical primer: per-loan model (mathematical specification)**](https://github.com/carjam/shimi#technical-primer-per-loan-model-mathematical-specification).
+- **RoboPulse** (this repo) wraps that solver in a **tape replay** and adds an **outer feedback loop**: it observes portfolio-level **signals** after each feasible allocation and **retunes** $(\alpha,\beta,\gamma)$ on a fixed schedule. It does **not** replace Shimi’s constraints or solver; it only changes the **objective weights** passed into `allocate_loan`.
+
+---
+
+### Inner loop (Shimi): per-loan convex QP
+
+**Decision variables.** Lender shares $s \in \mathbb{R}^n$ with $\mathbf{1}^\top s = 1$, bounds from **remaining commitment** and **participation floor** $f_{\mathrm{floor}}$ (see Shimi for the polytope $\mathcal{F}$). If $\mathcal{F} = \emptyset$, the allocation is **infeasible** (RoboPulse records it and surfaces **infeasibility rate** in the UI).
+
+**Objective (same symbols as code).** With nonnegative weights and standard Shimi terms,
+
+$$
+\min_{s \in \mathcal{F}} \quad
+\alpha \lVert s - t\rVert_2^2
++ \beta \!\sum_{i \in \mathrm{CO}}\!\Bigl(\frac{L\, s_i}{r_i}\Bigr)^{\!2}
++ \gamma \cdot (\text{FICO fairness term})
++ \mathrm{ridge}\,\lVert s\rVert_2^2 + \text{(tiny fallback)}.
+$$
+
+Here $t$ are **target shares**, $L$ is loan face, $r_i$ remaining commitment, and $\mathrm{CO}$ indexes **contractual originators**. The **γ** branch is either a **portfolio prior** imbalance penalty (cumulative funded FICO mass vs a common mean) or a **cold-start** pull toward equal shares, as implemented in `shimi.allocation.engine`. This is a **convex QP** (sum of weighted squared norms of affine functions of $s$); Shimi solves it with **CVXPY + OSQP**.
+
+RoboPulse **does not** modify $\mathcal{F}$; it only updates $(\alpha,\beta,\gamma)$ between loans subject to **param_bounds** in config.
+
+---
+
+### Outer loop (RoboPulse): signals and multiplicative updates
+
+After each **successful** allocation, RoboPulse computes **monitoring signals** (see `src/robopulse/metrics.py`). Let $s_i$ be realized share on the loan, $t_i$ target share, and $W$ the rolling window length `rolling_loans_for_share_deviation`.
+
+**Share pressure (α channel).** Per-lender deviation $d_{i,k} = \lvert s_{i,k} - t_i\rvert$ at loan index $k$. The controller input is
+
+$$
+D_{\mathrm{roll}} = \max_i \; \max_{k' \,\in\, \mathcal{K}_W} d_{i,k'}
+$$
+
+where $\mathcal{K}_W$ is the set of loan indices in the **last $W$ loans** on the tape (same window as `rolling_loans_for_share_deviation`).
+
+**FICO fairness pressure (γ channel).** After the loan, each lender has a **post-deal** weighted-average FICO $\widehat{\mathrm{FICO}}_i$ (from cumulative funded face and FICO-weighted face, including this allocation). Let $\mu$ be the **mean** of those averages across lenders. The implementation uses **percent deviation from that mean**:
+
+$$
+\delta_i = \frac{\left\lvert \widehat{\mathrm{FICO}}_i - \mu \right\rvert}{\mu} \times 100,
+\qquad
+\delta_{\mathrm{worst}} = \max_i \delta_i.
+$$
+
+**γ activation.** Until total funded face reaches `fico_gamma_min_total_funded_fraction` × **pool commitment**, RoboPulse forces $\gamma_{\mathrm{fico}} = 0$ regardless of $\delta_{\mathrm{worst}}$ (FICO term inactive in both controller and Shimi objective for that phase).
+
+**Exhaustion alignment (β channel).** Let $\mathrm{rem}_i$ be remaining commitment after the loan, $\bar{m}_i$ mean allocated face per loan over a trailing window, and `loans_per_calendar_day` = $\lambda$. Predicted **days-to-exhaustion** offsets (same units as code):
+
+$$
+T_i = \frac{\mathrm{rem}_i}{\bar{m}_i \, \lambda}.
+$$
+
+**Exhaustion spread** is $E = \max_i T_i - \min_i T_i$ (finite offsets only; degenerate cases return $0$).
+
+**Discrete-time controller.** Let $\texttt{cap} = \texttt{max\_abs\_share\_deviation}$, $\varepsilon = \texttt{fico\_epsilon\_pct}$, and gains $g_\alpha, g_\beta, g_\gamma, g_{\mathrm{seed}}, \rho$ from `controller_gains` (`decay_when_within_tolerance` = $\rho$). On each **reevaluation** step (every `reevaluation_every_n_loans` loans), `adjust_params` applies **multiplicative** rules with **clipping** to `[param_bounds]`:
+
+| Signal | Tighten (increase weight) | Relax (decay) |
+|--------|---------------------------|----------------|
+| **α** | If $D_{\mathrm{roll}} > \mathrm{cap}$: $\alpha \leftarrow \mathrm{clip}(\alpha \cdot g_\alpha)$ | Else if $D_{\mathrm{roll}} < \mathrm{cap}/2$: $\alpha \leftarrow \mathrm{clip}(\alpha \cdot \rho)$ |
+| **β** | If `simultaneous_exhaustion` and no fixed target dates: if $E > 0.25$: $\beta \leftarrow \mathrm{clip}(\beta \cdot g_\beta)$ | Else: $\beta \leftarrow \mathrm{clip}(\beta \cdot \rho)$ |
+| **γ** | If γ active and $\delta_{\mathrm{worst}} > \varepsilon$: if $\gamma \approx 0$, seed $\gamma \leftarrow g_{\mathrm{seed}}$; else $\gamma \leftarrow \mathrm{clip}(\gamma \cdot g_\gamma)$ | Else if $\delta_{\mathrm{worst}} < \varepsilon/2$: $\gamma \leftarrow \mathrm{clip}(\gamma \cdot \rho)$ |
+
+This is a **heuristic outer loop** (not e.g. LQR or MPC): it trades off tracking, exhaustion sync, and FICO fairness by nudging weights when monitored quantities leave a **deadband**. **Stability or optimality of the joint inner–outer system is not claimed**—the intended use is **simulation and tuning** with explicit metrics and alerts.
+
+---
+
 ## Configuration
 
 Config is a **single JSON file** (default: `config/default.json`). Paths under `data` are resolved **relative to the config file’s directory** (absolute paths are allowed).
