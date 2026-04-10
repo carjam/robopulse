@@ -20,11 +20,7 @@ Adaptive **α / β / γ** tuning for [Shimi](https://github.com/carjam/shimi)-st
 **Objective (same symbols as code).** With nonnegative weights and standard Shimi terms,
 
 $$
-\min_{s \in \mathcal{F}} \quad
-\alpha \lVert s - t\rVert_{2}^{2}
-+ \beta \!\sum_{i \in \mathrm{CO}}\!\Bigl(\frac{L\, s_{i}}{r_{i}}\Bigr)^{\!2}
-+ \gamma \cdot (\text{FICO fairness term})
-+ \mathrm{ridge}\,\lVert s\rVert_{2}^{2} + \text{(tiny fallback)}.
+\min_{s \in \mathcal{F}} \quad \alpha \left\lVert s - t \right\rVert_2^2 + \beta \sum_{i \in \mathrm{CO}} \Bigl(\frac{L\, s_{i}}{r_{i}}\Bigr)^{2} + \gamma \cdot (\text{FICO fairness term}) + \mathrm{ridge} \left\lVert s \right\rVert_2^2 + \text{(tiny fallback)} .
 $$
 
 Here $t$ are **target shares**, $L$ is loan face, $r_{i}$ remaining commitment, and $\mathrm{CO}$ indexes **contractual originators**. The **γ** branch is either a **portfolio prior** imbalance penalty (cumulative funded FICO mass vs a common mean) or a **cold-start** pull toward equal shares, as implemented in `shimi.allocation.engine`. This is a **convex QP** (sum of weighted squared norms of affine functions of $s$); Shimi solves it with **CVXPY + OSQP**.
@@ -48,9 +44,7 @@ where $\mathcal{K}_{W}$ is the set of loan indices in the last $W$ loans on the 
 **FICO fairness pressure (γ channel).** After the loan, each lender has a **post-deal** weighted-average FICO $\widehat{\mathrm{FICO}}_{i}$ (from cumulative funded face and FICO-weighted face, including this allocation). Let $\mu$ be the **mean** of those averages across lenders. The implementation uses **percent deviation from that mean**:
 
 $$
-\delta_{i} = \frac{\left\lvert \widehat{\mathrm{FICO}}_{i} - \mu \right\rvert}{\mu} \times 100,
-\qquad
-\delta_{\mathrm{worst}} = \max_{i} \delta_{i}.
+\delta_{i} = \frac{\left\lvert \widehat{\mathrm{FICO}}_{i} - \mu \right\rvert}{\mu} \times 100, \qquad \delta_{\mathrm{worst}} = \max_{i} \delta_{i}.
 $$
 
 **γ activation.** Until total funded face reaches `fico_gamma_min_total_funded_fraction` × **pool commitment**, RoboPulse forces $\gamma_{\mathrm{fico}} = 0$ regardless of $\delta_{\mathrm{worst}}$ (FICO term inactive in both controller and Shimi objective for that phase).
