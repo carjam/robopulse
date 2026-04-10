@@ -80,6 +80,12 @@ def _advance_loan_wrap() -> None:
     st.session_state["_rp_need_slider_sync"] = True
 
 
+def _rewind_to_start() -> None:
+    """Jump visible end to the first loan on the tape (minimum ``loan_index``)."""
+    st.session_state["rp_tape_end"] = idx_min
+    st.session_state["_rp_need_slider_sync"] = True
+
+
 if "rp_tape_end" not in st.session_state:
     st.session_state.rp_tape_end = idx_max
 else:
@@ -95,7 +101,15 @@ st.markdown("##### Tape scrubber")
 ctrl, slide = st.columns([0.22, 0.78], gap="medium")
 with ctrl:
     st.caption("Playback")
-    r1, r2 = st.columns(2)
+    r0, r1, r2 = st.columns(3)
+    with r0:
+        st.button(
+            "⏮",
+            key="rp_rewind_start",
+            help="Rewind to first loan (tape start).",
+            on_click=_rewind_to_start,
+            use_container_width=True,
+        )
     with r1:
         st.button("⏭ +1", key="rp_step_one", on_click=_advance_loan_wrap, use_container_width=True)
     with r2:
@@ -105,6 +119,23 @@ with slide:
     st.slider("Loan index (visible end)", min_value=idx_min, max_value=idx_max, key="rp_slider_loan")
 
 st.session_state["rp_tape_end"] = int(st.session_state["rp_slider_loan"])
+
+# Full-tape alerts omitted while the scrubber sits on the first loan (replay start).
+_at_replay_start = idx_max > idx_min and int(st.session_state["rp_tape_end"]) == idx_min
+if not _at_replay_start:
+    _alerts: list[str] = []
+    if "infeasibility_rate_window" in full.columns:
+        bi = full["infeasibility_rate_window"] > cfg.infeasibility_alert_rate_max
+        if bi.any():
+            _alerts.append(f"Infeas. rate: **{int(bi.sum())}** loans (full tape).")
+    if "worst_fico_pct_dev" in full.columns:
+        bf = full["worst_fico_pct_dev"] > cfg.fico_epsilon_pct
+        if bf.any():
+            _alerts.append(f"FICO ε: **{int(bf.sum())}** loans (full tape).")
+    if _alerts:
+        st.warning("\n".join(_alerts))
+    else:
+        st.success("No alerts on full replay.")
 
 
 def _maybe_autoplay_advance() -> None:
@@ -232,17 +263,4 @@ def _tape_chart_fragment() -> None:
 
 _tape_chart_fragment()
 
-alerts: list[str] = []
-if "infeasibility_rate_window" in full.columns:
-    bi = full["infeasibility_rate_window"] > cfg.infeasibility_alert_rate_max
-    if bi.any():
-        alerts.append(f"Infeas. rate: **{int(bi.sum())}** loans (full tape).")
-if "worst_fico_pct_dev" in full.columns:
-    bf = full["worst_fico_pct_dev"] > cfg.fico_epsilon_pct
-    if bf.any():
-        alerts.append(f"FICO ε: **{int(bf.sum())}** loans (full tape).")
-if alerts:
-    st.warning("\n".join(alerts))
-else:
-    st.success("No alerts on full replay.")
 st.caption(f"Tape: {summary.get('total_loans', 0)} loans · Infeas: {summary.get('infeasible_loans', 0)} · `{cfg_path}`")
