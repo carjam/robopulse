@@ -1,0 +1,8 @@
+# Install Shimi from a local checkout (path is configurable; see README).
+-e ../shimi
+
+# RoboPulse runtime (also declared in pyproject.toml).
+numpy>=2.0,<3
+pandas>=2.0,<3
+plotly>=5.18,<6
+streamlit>=1.28,<2

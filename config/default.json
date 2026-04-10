@@ -1,0 +1,37 @@
+{
+  "simulation_start_date": "2026-01-05",
+  "loans_per_calendar_day": 1,
+  "rolling_loans_for_share_deviation": 20,
+  "max_abs_share_deviation": 0.08,
+  "fico_epsilon_pct": 1.5,
+  "fico_gamma_min_total_funded_fraction": 0.02,
+  "reevaluation_every_n_loans": 1,
+  "simultaneous_exhaustion": true,
+  "target_exhaustion_date_by_lender": null,
+  "infeasibility_alert_rate_max": 0.1,
+  "infeasibility_alert_window_loans": 30,
+  "allocation_params": {
+    "alpha": 1.0,
+    "beta": 0.25,
+    "gamma_fico": 0.0,
+    "participation_floor": 0.05
+  },
+  "param_bounds": {
+    "alpha_min": 0.05,
+    "alpha_max": 20.0,
+    "beta_min": 0.0,
+    "beta_max": 20.0,
+    "gamma_min": 0.0,
+    "gamma_max": 10.0
+  },
+  "controller_gains": {
+    "alpha_on_share_violation": 1.08,
+    "beta_on_exhaustion_spread": 1.05,
+    "gamma_on_fico_violation": 1.06,
+    "decay_when_within_tolerance": 0.995
+  },
+  "data": {
+    "lenders_csv": "../../shimi/data/sample_lenders.csv",
+    "loans_csv": "../../shimi/data/sample_loans.csv"
+  }
+}
