@@ -21,13 +21,13 @@ Adaptive **α / β / γ** tuning for [Shimi](https://github.com/carjam/shimi)-st
 
 $$
 \min_{s \in \mathcal{F}} \quad
-\alpha \lVert s - t\rVert_2^2
-+ \beta \!\sum_{i \in \mathrm{CO}}\!\Bigl(\frac{L\, s_i}{r_i}\Bigr)^{\!2}
+\alpha \lVert s - t\rVert_{2}^{2}
++ \beta \!\sum_{i \in \mathrm{CO}}\!\Bigl(\frac{L\, s_{i}}{r_{i}}\Bigr)^{\!2}
 + \gamma \cdot (\text{FICO fairness term})
-+ \mathrm{ridge}\,\lVert s\rVert_2^2 + \text{(tiny fallback)}.
++ \mathrm{ridge}\,\lVert s\rVert_{2}^{2} + \text{(tiny fallback)}.
 $$
 
-Here $t$ are **target shares**, $L$ is loan face, $r_i$ remaining commitment, and $\mathrm{CO}$ indexes **contractual originators**. The **γ** branch is either a **portfolio prior** imbalance penalty (cumulative funded FICO mass vs a common mean) or a **cold-start** pull toward equal shares, as implemented in `shimi.allocation.engine`. This is a **convex QP** (sum of weighted squared norms of affine functions of $s$); Shimi solves it with **CVXPY + OSQP**.
+Here $t$ are **target shares**, $L$ is loan face, $r_{i}$ remaining commitment, and $\mathrm{CO}$ indexes **contractual originators**. The **γ** branch is either a **portfolio prior** imbalance penalty (cumulative funded FICO mass vs a common mean) or a **cold-start** pull toward equal shares, as implemented in `shimi.allocation.engine`. This is a **convex QP** (sum of weighted squared norms of affine functions of $s$); Shimi solves it with **CVXPY + OSQP**.
 
 RoboPulse **does not** modify $\mathcal{F}$; it only updates $(\alpha,\beta,\gamma)$ between loans subject to **param_bounds** in config.
 
@@ -35,41 +35,41 @@ RoboPulse **does not** modify $\mathcal{F}$; it only updates $(\alpha,\beta,\gam
 
 ### Outer loop (RoboPulse): signals and multiplicative updates
 
-After each **successful** allocation, RoboPulse computes **monitoring signals** (see `src/robopulse/metrics.py`). Let $s_i$ be realized share on the loan, $t_i$ target share, and $W$ the rolling window length `rolling_loans_for_share_deviation`.
+After each **successful** allocation, RoboPulse computes **monitoring signals** (see `src/robopulse/metrics.py`). Let $s_{i}$ be realized share on the loan, $t_{i}$ target share, and $W$ the rolling window length `rolling_loans_for_share_deviation`.
 
-**Share pressure (α channel).** Per-lender deviation $d_{i,k} = \lvert s_{i,k} - t_i\rvert$ at loan index $k$. The controller input is
-
-$$
-D_{\mathrm{roll}} = \max_i \; \max_{k' \,\in\, \mathcal{K}_W} d_{i,k'}
-$$
-
-where $\mathcal{K}_W$ is the set of loan indices in the **last $W$ loans** on the tape (same window as `rolling_loans_for_share_deviation`).
-
-**FICO fairness pressure (γ channel).** After the loan, each lender has a **post-deal** weighted-average FICO $\widehat{\mathrm{FICO}}_i$ (from cumulative funded face and FICO-weighted face, including this allocation). Let $\mu$ be the **mean** of those averages across lenders. The implementation uses **percent deviation from that mean**:
+**Share pressure (α channel).** Per-lender deviation $d_{i,k} = \lvert s_{i,k} - t_{i}\rvert$ at loan index $k$. The controller input is
 
 $$
-\delta_i = \frac{\left\lvert \widehat{\mathrm{FICO}}_i - \mu \right\rvert}{\mu} \times 100,
+D_{\mathrm{roll}} = \max_{i} \; \max_{k^{\prime} \,\in\, \mathcal{K}_{W}} d_{i,k^{\prime}}
+$$
+
+where $\mathcal{K}_{W}$ is the set of loan indices in the last $W$ loans on the tape (same window as `rolling_loans_for_share_deviation`).
+
+**FICO fairness pressure (γ channel).** After the loan, each lender has a **post-deal** weighted-average FICO $\widehat{\mathrm{FICO}}_{i}$ (from cumulative funded face and FICO-weighted face, including this allocation). Let $\mu$ be the **mean** of those averages across lenders. The implementation uses **percent deviation from that mean**:
+
+$$
+\delta_{i} = \frac{\left\lvert \widehat{\mathrm{FICO}}_{i} - \mu \right\rvert}{\mu} \times 100,
 \qquad
-\delta_{\mathrm{worst}} = \max_i \delta_i.
+\delta_{\mathrm{worst}} = \max_{i} \delta_{i}.
 $$
 
 **γ activation.** Until total funded face reaches `fico_gamma_min_total_funded_fraction` × **pool commitment**, RoboPulse forces $\gamma_{\mathrm{fico}} = 0$ regardless of $\delta_{\mathrm{worst}}$ (FICO term inactive in both controller and Shimi objective for that phase).
 
-**Exhaustion alignment (β channel).** Let $\mathrm{rem}_i$ be remaining commitment after the loan, $\bar{m}_i$ mean allocated face per loan over a trailing window, and `loans_per_calendar_day` = $\lambda$. Predicted **days-to-exhaustion** offsets (same units as code):
+**Exhaustion alignment (β channel).** Let $\mathrm{rem}_{i}$ be remaining commitment after the loan, $\bar{m}_{i}$ mean allocated face per loan over a trailing window, and `loans_per_calendar_day` = $\lambda$. Predicted **days-to-exhaustion** offsets (same units as code):
 
 $$
-T_i = \frac{\mathrm{rem}_i}{\bar{m}_i \, \lambda}.
+T_{i} = \frac{\mathrm{rem}_{i}}{\bar{m}_{i} \, \lambda}.
 $$
 
-**Exhaustion spread** is $E = \max_i T_i - \min_i T_i$ (finite offsets only; degenerate cases return $0$).
+**Exhaustion spread** is $E = \max_{i} T_{i} - \min_{i} T_{i}$ (finite offsets only; degenerate cases return $0$).
 
-**Discrete-time controller.** Let $\texttt{cap} = \texttt{max\_abs\_share\_deviation}$, $\varepsilon = \texttt{fico\_epsilon\_pct}$, and gains $g_\alpha, g_\beta, g_\gamma, g_{\mathrm{seed}}, \rho$ from `controller_gains` (`decay_when_within_tolerance` = $\rho$). On each **reevaluation** step (every `reevaluation_every_n_loans` loans), `adjust_params` applies **multiplicative** rules with **clipping** to `[param_bounds]`:
+**Discrete-time controller.** Let $c$ be the **cap** threshold from `max_abs_share_deviation`, let $\varepsilon$ match `fico_epsilon_pct`, and let $g_{\alpha}, g_{\beta}, g_{\gamma}, g_{\mathrm{seed}}, \rho$ be the gains from `controller_gains` (with **decay** $\rho$ from `decay_when_within_tolerance`). On each **reevaluation** step (every `reevaluation_every_n_loans` loans), `adjust_params` applies **multiplicative** rules with **clipping** to `[param_bounds]`:
 
 | Signal | Tighten (increase weight) | Relax (decay) |
 |--------|---------------------------|----------------|
-| **α** | If $D_{\mathrm{roll}} > \mathrm{cap}$: $\alpha \leftarrow \mathrm{clip}(\alpha \cdot g_\alpha)$ | Else if $D_{\mathrm{roll}} < \mathrm{cap}/2$: $\alpha \leftarrow \mathrm{clip}(\alpha \cdot \rho)$ |
-| **β** | If `simultaneous_exhaustion` and no fixed target dates: if $E > 0.25$: $\beta \leftarrow \mathrm{clip}(\beta \cdot g_\beta)$ | Else: $\beta \leftarrow \mathrm{clip}(\beta \cdot \rho)$ |
-| **γ** | If γ active and $\delta_{\mathrm{worst}} > \varepsilon$: if $\gamma \approx 0$, seed $\gamma \leftarrow g_{\mathrm{seed}}$; else $\gamma \leftarrow \mathrm{clip}(\gamma \cdot g_\gamma)$ | Else if $\delta_{\mathrm{worst}} < \varepsilon/2$: $\gamma \leftarrow \mathrm{clip}(\gamma \cdot \rho)$ |
+| **α** | If $D_{\mathrm{roll}} > c$: $\alpha \leftarrow \mathrm{clip}(\alpha \cdot g_{\alpha})$ | Else if $D_{\mathrm{roll}} < c/2$: $\alpha \leftarrow \mathrm{clip}(\alpha \cdot \rho)$ |
+| **β** | If `simultaneous_exhaustion` and no fixed target dates: if $E > 0.25$: $\beta \leftarrow \mathrm{clip}(\beta \cdot g_{\beta})$ | Else: $\beta \leftarrow \mathrm{clip}(\beta \cdot \rho)$ |
+| **γ** | If γ active and $\delta_{\mathrm{worst}} > \varepsilon$: if $\gamma \approx 0$, seed $\gamma \leftarrow g_{\mathrm{seed}}$; else $\gamma \leftarrow \mathrm{clip}(\gamma \cdot g_{\gamma})$ | Else if $\delta_{\mathrm{worst}} < \varepsilon/2$: $\gamma \leftarrow \mathrm{clip}(\gamma \cdot \rho)$ |
 
 This is a **heuristic outer loop** (not e.g. LQR or MPC): it trades off tracking, exhaustion sync, and FICO fairness by nudging weights when monitored quantities leave a **deadband**. **Stability or optimality of the joint inner–outer system is not claimed**—the intended use is **simulation and tuning** with explicit metrics and alerts.
 
@@ -109,7 +109,7 @@ Passed into Shimi as starting **AllocationParams**: **`alpha`** (share tracking)
 
 ### Bounds (`param_bounds`)
 
-**`alpha_*`, `beta_*`, `gamma_*`**: min/max **clips** after each controller step so tuned weights stay in a safe range.
+Fields such as `alpha_min` / `alpha_max`, `beta_min` / `beta_max`, and `gamma_min` / `gamma_max` define min/max **clips** after each controller step so tuned weights stay in a safe range.
 
 ### Gains (`controller_gains`)
 
